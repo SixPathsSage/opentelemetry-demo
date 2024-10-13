@@ -2,10 +2,53 @@ version: '3.8'
 
 services:
   spring-app:
+    container_name: spring-app
     build: .
     ports:
       - "8080:8080"
     environment:
-      OTEL_TRACES_EXPORTER: console
-      OTEL_METRICS_EXPORTER: console
-      OTEL_LOGS_EXPORTER: console
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: spring-app
+      DB_URL: jdbc:postgresql://postgres-db:5432/postgres
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+    depends_on:
+      - postgres-db
+      - jaeger-backend
+      - otel-collector
+
+  postgres-db:
+    container_name: postgres-db
+    image: postgres:latest
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib
+    volumes:
+      - ./otel-config/config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - 1888:1888 # pprof extension
+      - 8888:8888 # Prometheus metrics exposed by the Collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 13133:13133 # health_check extension
+      - 4318:4318 # OTLP http receiver
+      - 55679:55679 # zpages extension
+
+  jaeger-backend:
+    container_name: jaeger-backend
+    image: jaegertracing/all-in-one:1.41.0
+    ports:
+      - "14250:14250"
+      - "16686:16686"
+      - "4317:4317"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
